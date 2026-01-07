@@ -5,26 +5,35 @@ import tensorflow as tf
 import joblib
 import matplotlib.pyplot as plt
 import aerosandbox as asb
+import os
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="AI-CFD Digital Twin", layout="wide")
 
+# --- DEBUG: VERIFY FILES EXIST ---
+# This helps us confirm the server sees the files in the main folder
+st.sidebar.info(f"📂 Server Files: {os.listdir('.')}")
+
 # --- LOAD RESOURCES (Cached for speed) ---
 @st.cache_resource
 def load_brain():
-    # FIXED PATHS: Added 'airfoil_app/' to point to the subfolder
-    model = tf.keras.models.load_model('airfoil_app/airfoil_ai_model.keras')
-    scaler_X = joblib.load('airfoil_app/scaler_X.pkl')
-    # We don't strictly need scaler_y for prediction if we inverse transform manually, 
-    # but let's assume raw output for now or load if you saved it.
-    # based on your previous logs, you saved 'scaler_X.pkl'.
-    return model, scaler_X
+    # DIRECT PATHS (No folder names, because we flattened the repo)
+    model = tf.keras.models.load_model('airfoil_ai_model.keras')
+    scaler_X = joblib.load('scaler_X.pkl')
+    
+    # Try to load the Y scaler if it exists (for inverse transform)
+    try:
+        scaler_y = joblib.load('scaler_y.pkl')
+    except:
+        scaler_y = None
+        
+    return model, scaler_X, scaler_y
 
 try:
-    model, scaler_X = load_brain()
-    st.success("✅ AI Neural Network Loaded Successfully")
+    model, scaler_X, scaler_y = load_brain()
+    st.success("✅ AI Neural Network & Scalers Loaded")
 except Exception as e:
-    st.error(f"Error loading model: {e}")
+    st.error(f"❌ Error loading files: {e}")
     st.stop()
 
 # --- SIDEBAR: FLIGHT CONTROLS ---
@@ -80,20 +89,14 @@ input_scaled = scaler_X.transform(input_data)
 
 # Predict
 prediction_scaled = model.predict(input_scaled, verbose=0)
-# Note: If we scaled Y during training, we need to unscale it here. 
-# Looking at your previous code, you scaled X but did you scale Y? 
-# Your logs said "Scalers saved: scaler_X.pkl, scaler_y.pkl". 
-# IF you scaled Y, we need to load scaler_y and inverse_transform.
 
-# Let's try to load scaler_y to be safe
-try:
-    # FIXED PATH: Added 'airfoil_app/' here too
-    scaler_y = joblib.load('airfoil_app/scaler_y.pkl')
+# Inverse Transform (Un-scale the results)
+if scaler_y:
     prediction = scaler_y.inverse_transform(prediction_scaled)
     cl_pred = prediction[0][0]
     cd_pred = prediction[0][1]
-except:
-    # If Y wasn't scaled or file missing, assume raw output
+else:
+    # Fallback if no Y scaler exists
     cl_pred = prediction_scaled[0][0]
     cd_pred = prediction_scaled[0][1]
 
@@ -109,17 +112,20 @@ with col2:
     st.metric(label="Drag Coefficient (CD)", value=f"{cd_pred:.4f}")
     st.metric(label="Efficiency (L/D)", value=f"{ld_ratio:.1f}")
     
+    # --- SAFETY WARNINGS (Restored) ---
     if cl_pred > 1.2:
         st.warning("⚠️ High Lift - Approaching Stall Risk")
     if cd_pred < 0.01:
         st.success("✅ Laminar Flow Region")
+    if ld_ratio > 15:
+        st.success("🚀 High Efficiency Flight Regime")
 
 # 4. LIVE POLAR PLOT (Context)
 st.markdown("---")
 st.subheader("Flight Envelope Context")
 st.info("The red dot shows your current operating point relative to a standard drag polar.")
 
-# Fake background polar for context
+# Fake background polar for context (Ideal Theory)
 alpha_range = np.linspace(-10, 15, 50)
 cl_ideal = 2 * np.pi * np.radians(alpha_range)
 cd_ideal = 0.01 + 0.05 * cl_ideal**2 
