@@ -12,8 +12,9 @@ st.set_page_config(page_title="AI-CFD Digital Twin", layout="wide")
 # --- LOAD RESOURCES (Cached for speed) ---
 @st.cache_resource
 def load_brain():
-    model = tf.keras.models.load_model('airfoil_ai_model.keras')
-    scaler_X = joblib.load('scaler_X.pkl')
+    # FIXED PATHS: Added 'airfoil_app/' to point to the subfolder
+    model = tf.keras.models.load_model('airfoil_app/airfoil_ai_model.keras')
+    scaler_X = joblib.load('airfoil_app/scaler_X.pkl')
     # We don't strictly need scaler_y for prediction if we inverse transform manually, 
     # but let's assume raw output for now or load if you saved it.
     # based on your previous logs, you saved 'scaler_X.pkl'.
@@ -86,7 +87,8 @@ prediction_scaled = model.predict(input_scaled, verbose=0)
 
 # Let's try to load scaler_y to be safe
 try:
-    scaler_y = joblib.load('scaler_y.pkl')
+    # FIXED PATH: Added 'airfoil_app/' here too
+    scaler_y = joblib.load('airfoil_app/scaler_y.pkl')
     prediction = scaler_y.inverse_transform(prediction_scaled)
     cl_pred = prediction[0][0]
     cd_pred = prediction[0][1]
